@@ -1,4 +1,4 @@
-# @funboxteam/harold
+# harold
 
 <img align="right" width="192" height="192"
      alt="Harold avatar: Sad emoji with a smile mask on a face"
@@ -158,4 +158,4 @@ files, their stat will appear in “JS (legacy)” row.
 
 The avatar for the project was made by [Igor Garybaldi](http://pandabanda.com/).
 
-[![Sponsored by FunBox](https://funbox.ru/badges/sponsored_by_funbox_centered.svg)](https://funbox.ru)
+![Sponsored by DOPAMINE](sponsored_by_dopamine.svg)

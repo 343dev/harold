@@ -1,4 +1,4 @@
-# @funboxteam/harold
+# harold
 
 <img align="right" width="192" height="192"
      alt="Аватар: грустный эмоджи в маске с улыбкой"
@@ -156,4 +156,4 @@ WITHOUT_CONTENTHASH=true harold snapshot
 
 Аватар для репозитория нарисовал [Игорь Гарибальди](http://pandabanda.com/).
 
-[![Sponsored by FunBox](https://funbox.ru/badges/sponsored_by_funbox_centered.svg)](https://funbox.ru)
+![Sponsored by DOPAMINE](sponsored_by_dopamine.svg)
