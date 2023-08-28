@@ -1,10 +1,10 @@
-# harold
+# @343dev/harold
 
 <img align="right" width="192" height="192"
      alt="Harold avatar: Sad emoji with a smile mask on a face"
      src="./logo.png">
      
-[![npm](https://img.shields.io/npm/v/@funboxteam/harold.svg)](https://www.npmjs.com/package/@funboxteam/harold)
+[![npm](https://img.shields.io/npm/v/@343dev/harold.svg)](https://www.npmjs.com/package/@343dev/harold)
 
 **Harold** is a CLI tool that compares frontend project bundles in size.
 
@@ -28,7 +28,7 @@ we've built Harold.
 ## Installation
 
 ```bash
-npm install -g @funboxteam/harold
+npm install -g @343dev/harold
 ```
 
 ## Commands
@@ -157,5 +157,3 @@ files, their stat will appear in “JS (legacy)” row.
 ## Credits
 
 The avatar for the project was made by [Igor Garybaldi](http://pandabanda.com/).
-
-![Sponsored by DOPAMINE](sponsored_by_dopamine.svg)

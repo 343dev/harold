@@ -1,12 +1,12 @@
 {
-  "name": "@funboxteam/harold",
+  "name": "@343dev/harold",
   "version": "2.0.2",
   "description": "Project bundle comparison tool",
   "license": "MIT",
-  "author": "Andrey Ivanov (https://github.com/343dev)",
+  "author": "Andrey Warkentin (https://github.com/343dev)",
   "repository": {
     "type": "git",
-    "url": "https://github.com/funbox/harold"
+    "url": "https://github.com/343dev/harold"
   },
   "main": "index.js",
   "bin": {
