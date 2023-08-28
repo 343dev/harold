@@ -4,7 +4,7 @@
      alt="Аватар: грустный эмоджи в маске с улыбкой"
      src="./logo.png">
      
-[![npm](https://img.shields.io/npm/v/@funboxteam/harold.svg)](https://www.npmjs.com/package/@funboxteam/harold)
+[![npm](https://img.shields.io/npm/v/@343dev/harold.svg)](https://www.npmjs.com/package/@343dev/harold)
 
 **Harold** — CLI-утилита для сравнения размеров сборок фронтенд-проекта.
 
@@ -27,7 +27,7 @@
 ## Установка
 
 ```bash
-npm install -g @funboxteam/harold
+npm install -g @343dev/harold
 ```
 
 ## Команды
@@ -155,5 +155,3 @@ WITHOUT_CONTENTHASH=true harold snapshot
 ## Благодарности
 
 Аватар для репозитория нарисовал [Игорь Гарибальди](http://pandabanda.com/).
-
-![Sponsored by DOPAMINE](sponsored_by_dopamine.svg)
