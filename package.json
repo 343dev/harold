@@ -8,10 +8,11 @@
     "type": "git",
     "url": "https://github.com/343dev/harold"
   },
-  "main": "index.js",
   "bin": {
     "harold": "index.js"
   },
+  "type": "module",
+  "exports": "./index.js",
   "files": [
     "lib/",
     "tasks/",

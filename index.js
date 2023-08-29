@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 
-const program = require('commander');
+import { program } from 'commander';
 
-const pkg = require('./package.json');
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const diff = require('./tasks/diff');
-const snapshot = require('./tasks/snapshot');
+import diff from './tasks/diff.js';
+import snapshot from './tasks/snapshot.js';
+
+const dirname = path.dirname(fileURLToPath(import.meta.url));
+const packageJson = JSON.parse(await fs.readFile(path.join(dirname, 'package.json')));
 
 // Take snapshot
 program
@@ -35,8 +40,8 @@ program
 
 program
   .usage('[options]')
-  .version(pkg.version, '-V, --version')
-  .description(pkg.description)
+  .version(packageJson.version, '-V, --version')
+  .description(packageJson.description)
   .parse(process.argv);
 
 if (!program.args.length) program.help();
