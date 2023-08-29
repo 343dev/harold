@@ -33,7 +33,7 @@
     "commander": "7.2.0",
     "fast-glob": "3.2.5",
     "gzip-size": "6.0.0",
-    "ora": "5.4.0",
+    "ora": "^7.0.1",
     "pretty-bytes": "^6.1.1",
     "signal-exit": "^4.1.0"
   },
