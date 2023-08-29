@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.0 (29.08.2023)
+
+This package now pure ESM.
+
+Drop support for Node.js 14.
+
+
 ## 2.0.2 (10.06.2021)
 
 Fixed several security vulnerabilities:
