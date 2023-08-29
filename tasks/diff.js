@@ -1,13 +1,13 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
 
-const colorize = require('../lib/colorize');
-const printBuildTime = require('../lib/print-build-time');
-const printDiffFileTree = require('../lib/print-diff-file-tree');
-const printDiffTotal = require('../lib/print-diff-total');
-const printSnapshotInfo = require('../lib/print-snapshot-info');
+import colorize from '../lib/colorize.js';
+import printBuildTime from '../lib/print-build-time.js';
+import printDiffFileTree from '../lib/print-diff-file-tree.js';
+import printDiffTotal from '../lib/print-diff-total.js';
+import printSnapshotInfo from '../lib/print-snapshot-info.js';
 
-module.exports = function diff(left, right) {
+export default function diff(left, right) {
   const leftPath = path.resolve(left);
   const rightPath = path.resolve(right);
 
@@ -49,4 +49,4 @@ module.exports = function diff(left, right) {
   console.log(colorize('Diff by files:').cyan);
   printDiffFileTree(leftSnapshot.fsEntries, rightSnapshot.fsEntries);
   console.log();
-};
+}

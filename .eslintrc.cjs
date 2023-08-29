@@ -3,4 +3,7 @@ module.exports = {
   env: {
     node: true,
   },
+  rules: {
+    'import/extensions': [2, 'always'],
+  },
 };
