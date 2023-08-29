@@ -2,6 +2,7 @@
   "name": "@343dev/harold",
   "version": "2.0.2",
   "description": "Project bundle comparison tool",
+  "keywords": ["front-end", "bundle", "analyzer", "comparison"],
   "license": "MIT",
   "author": "Andrey Warkentin (https://github.com/343dev)",
   "repository": {
