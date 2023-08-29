@@ -4,13 +4,13 @@ import buildProject from '../lib/build-project.js';
 import generateSnapshot from '../lib/generate-snapshot.js';
 import writeSnapshotFile from '../lib/write-snapshot-file.js';
 
-export default async function snapshot(cmdObj) {
+export default async function snapshot(cmdObject) {
   const spinner = ora();
   const context = {
-    buildPath: cmdObj.path,
-    buildTime: null,
-    execCmd: cmdObj.exec,
-    snapshot: null,
+    buildPath: cmdObject.path,
+    buildTime: undefined,
+    execCmd: cmdObject.exec,
+    snapshot: undefined,
   };
 
   console.log();
@@ -43,7 +43,7 @@ export default async function snapshot(cmdObj) {
 
   try {
     spinner.start('Save snapshot');
-    await writeSnapshotFile(context.snapshot, cmdObj.output);
+    await writeSnapshotFile(context.snapshot, cmdObject.output);
     spinner.clear();
   } catch (error) {
     spinner.fail();

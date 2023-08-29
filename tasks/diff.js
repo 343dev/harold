@@ -16,6 +16,7 @@ export default function diff(left, right) {
 
   if (leftBuffer.equals(rightBuffer)) {
     console.log('Snapshots are equal');
+    // eslint-disable-next-line unicorn/no-process-exit
     process.exit(0);
   }
 

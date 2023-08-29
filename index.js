@@ -44,7 +44,7 @@ program
   .description(packageJson.description)
   .parse(process.argv);
 
-if (!program.args.length) program.help();
+if (program.args.length === 0) program.help();
 
 process.on('unhandledRejection', error => {
   console.error(error);
