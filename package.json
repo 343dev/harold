@@ -27,7 +27,6 @@
   ],
   "scripts": {
     "lint": "eslint .",
-    "prepublishOnly": "if [ -z \"$CI\" ]; then lawyer; fi",
     "test": "echo \"Error: no test specified\" && exit 1",
     "update-git-hooks": "npx simple-git-hooks"
   },
