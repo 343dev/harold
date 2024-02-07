@@ -1,4 +1,4 @@
-import ora from 'ora';
+import { createSpinner } from 'nanospinner';
 
 import { pathToFileURL } from "node:url";
 
@@ -19,16 +19,13 @@ export default async function snapshot(options) {
     snapshotPath: options.output,
   };
 
-  const spinner = ora();
+  const spinner = createSpinner();
 
   console.log();
   console.log('Taking a snapshot...');
 
-  spinner.indent = 1;
-  spinner.color = 'yellow';
-
   try {
-    spinner.start('Build project');
+    spinner.start({ text: 'Build project' });
 
     const buildStartTime = process.hrtime();
     await buildProject(build.command);
@@ -36,12 +33,12 @@ export default async function snapshot(options) {
 
     spinner.clear();
   } catch (error) {
-    spinner.fail();
+    spinner.error();
     throw error;
   }
 
   try {
-    spinner.start('Generate snapshot');
+    spinner.start({ text: 'Generate snapshot' });
 
     build.snapshot = generateSnapshot({
       buildDirectory: build.directory,
@@ -51,12 +48,12 @@ export default async function snapshot(options) {
 
     spinner.clear();
   } catch (error) {
-    spinner.fail();
+    spinner.error();
     throw error;
   }
 
   try {
-    spinner.start('Save snapshot');
+    spinner.start({ text: 'Save snapshot' });
 
     await writeSnapshotFile({
       buildSnapshot: build.snapshot,
@@ -65,11 +62,11 @@ export default async function snapshot(options) {
 
     spinner.clear();
   } catch (error) {
-    spinner.fail();
+    spinner.error();
     throw error;
   }
 
-  spinner.succeed('Done!');
+  spinner.success({ text: 'Done!' });
   console.log();
 }
 
