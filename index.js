@@ -15,22 +15,20 @@ const packageJson = JSON.parse(await fs.readFile(path.join(dirname, 'package.jso
 // Take snapshot
 program.command('snapshot')
   .option(
+    '-c, --config <path>',
+    'use this configuration, overriding default config options if present',
+  )
+  .option(
     '-o, --output <path>',
     `output filepath (default: ".${path.sep}harold_snapshot_<date>_<time>.json")`,
   )
   .option(
     '-e, --exec <cmd>',
-    'build command',
-    'npm run build-production',
+    'build command (default: "npm run build-production")',
   )
   .option(
     '-p, --path <path>',
-    'build path',
-    'public',
-  )
-  .option(
-    '-c, --config <path>',
-    'use this configuration, overriding default config options if present',
+    'build path (default: "public")',
   )
   .description('build project and take snapshot')
   .action(snapshot);

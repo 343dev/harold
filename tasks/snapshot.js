@@ -12,8 +12,8 @@ export default async function snapshot(options) {
   const config = await getConfig(options.config);
 
   const build = {
-    command: options.exec,
-    directory: options.path,
+    command: options.exec || config.build.command,
+    path: options.path || config.build.path,
     totalTime: undefined,
     snapshot: undefined,
     snapshotPath: options.output,
@@ -41,7 +41,7 @@ export default async function snapshot(options) {
     spinner.start({ text: 'Generate snapshot' });
 
     build.snapshot = generateSnapshot({
-      buildDirectory: build.directory,
+      buildDirectory: build.path,
       buildTime: build.totalTime,
       categories: config.categories || {},
     });

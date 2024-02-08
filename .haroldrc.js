@@ -1,4 +1,8 @@
 export default {
+  build: {
+    command: 'npm run build-production',
+    path: 'public',
+  },
   categories: {
     CSS: /\.css$/,
     JavaScript: /\.js$/,
