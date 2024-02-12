@@ -45,7 +45,7 @@
   "devDependencies": {
     "eslint": "^8.56.0",
     "eslint-plugin-unicorn": "^51.0.1",
-    "lint-staged": "^14.0.1",
+    "lint-staged": "^15.2.2",
     "simple-git-hooks": "^2.9.0"
   },
   "lint-staged": {
