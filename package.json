@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "cli-table3": "^0.6.3",
-    "commander": "^11.0.0",
+    "commander": "^12.0.0",
     "fast-glob": "^3.3.2",
     "gzip-size": "^7.0.0",
     "nanospinner": "^1.1.0",
