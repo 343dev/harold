@@ -12,9 +12,10 @@ export default async function snapshot(options) {
   const config = await getConfig(options.config);
 
   const build = {
-    env: { ...process.env, ...config.build.env },
-    command: options.exec || config.build.command,
-    path: options.path || config.build.path,
+    env: { ...process.env, ...config?.build?.env },
+    command: options.exec || config?.build?.command,
+    path: options.path || config?.build?.path,
+    categories: config?.categories || {},
     totalTime: undefined,
     snapshot: undefined,
     snapshotPath: options.output,
@@ -44,7 +45,7 @@ export default async function snapshot(options) {
     build.snapshot = generateSnapshot({
       buildDirectory: build.path,
       buildTime: build.totalTime,
-      categories: config.categories || {},
+      categories: build.categories,
     });
 
     spinner.clear();
