@@ -12,6 +12,7 @@ export default async function snapshot(options) {
   const config = await getConfig(options.config);
 
   const build = {
+    env: { ...process.env, ...config.build.env },
     command: options.exec || config.build.command,
     path: options.path || config.build.path,
     totalTime: undefined,
@@ -28,7 +29,7 @@ export default async function snapshot(options) {
     spinner.start({ text: 'Build project' });
 
     const buildStartTime = process.hrtime();
-    await buildProject(build.command);
+    await buildProject(build.command, build.env);
     build.totalTime = process.hrtime(buildStartTime);
 
     spinner.clear();

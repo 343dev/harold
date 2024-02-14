@@ -1,5 +1,8 @@
 export default {
   build: {
+    env: {
+      NO_HASH: true,
+    },
     command: 'npm run build-production',
     path: 'public',
   },
