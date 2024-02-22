@@ -53,6 +53,18 @@ Compares the passed snapshots.
 
 Sends halp.
 
+## Configuration
+
+The default settings are located in [.haroldrc.js](./.haroldrc.js), the file contains a list of supported parameters
+and their brief description.
+
+When running with the `--config path/to/.haroldrc.js` flag, the settings from the specified configuration file will
+be used.
+
+When running normally, without the `--config` flag, a recursive search for the `.haroldrc.js` file will be performed
+starting from the current directory and up to the root of the file system. If the file is not found, the default
+settings will be applied.
+
 ## FAQ
 
 ### How does it work?
@@ -134,12 +146,6 @@ the overall comparison.
 Modern frontend bundlers may add hashes to the filenames to improve caching. But Harold compares files using
 their names. To improve the diff quality you can set up your bundler the way that turns off hashes when environment
 variable `NO_HASH` is set.
-
-Example:
-
-```bash
-NO_HASH=true harold snapshot
-```
 
 ### How to make a snapshot without building a project?
 
