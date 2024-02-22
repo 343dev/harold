@@ -13,28 +13,28 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageJson = JSON.parse(await fs.readFile(path.join(dirname, 'package.json')));
 
 // Take snapshot
-program
-  .command('snapshot')
+program.command('snapshot')
+  .option(
+    '-c, --config <path>',
+    'use this configuration, overriding default config options if present',
+  )
   .option(
     '-o, --output <path>',
-    'output filepath (default: "harold_snapshot_<date>_<time>.json")',
+    `output filepath (default: ".${path.sep}harold_snapshot_<date>_<time>.json")`,
   )
   .option(
     '-e, --exec <cmd>',
-    'build command (will be run with NO_HASH=true env variable set)',
-    'npm run build-production',
+    'build command (default: "npm run build-production")',
   )
   .option(
     '-p, --path <path>',
-    'build path',
-    'public',
+    'build path (default: "public")',
   )
   .description('build project and take snapshot')
   .action(snapshot);
 
 // Compare snapshots
-program
-  .command('diff <left> <right>')
+program.command('diff <left> <right>')
   .description('compare snapshots')
   .action(diff);
 

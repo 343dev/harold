@@ -1,6 +1,6 @@
 {
   "name": "@343dev/harold",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "Project bundle comparison tool",
   "keywords": [
     "front-end",
@@ -31,22 +31,21 @@
     "update-git-hooks": "npx simple-git-hooks"
   },
   "engines": {
-    "node": ">=16.14"
+    "node": ">=18.12"
   },
   "dependencies": {
     "cli-table3": "^0.6.3",
-    "commander": "^11.0.0",
-    "fast-glob": "^3.3.1",
+    "commander": "^12.0.0",
+    "fast-glob": "^3.3.2",
     "gzip-size": "^7.0.0",
-    "ora": "^7.0.1",
+    "nanospinner": "^1.1.0",
     "pretty-bytes": "^6.1.1",
     "signal-exit": "^4.1.0"
   },
   "devDependencies": {
-    "eslint": "^8.48.0",
-    "eslint-plugin-import": "^2.28.1",
-    "eslint-plugin-unicorn": "^48.0.1",
-    "lint-staged": "^14.0.1",
+    "eslint": "^8.56.0",
+    "eslint-plugin-unicorn": "^51.0.1",
+    "lint-staged": "^15.2.2",
     "simple-git-hooks": "^2.9.0"
   },
   "lint-staged": {
@@ -54,14 +53,5 @@
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged"
-  },
-  "eslintConfig": {
-    "extends": "plugin:unicorn/recommended",
-    "plugins": [
-      "import"
-    ],
-    "rules": {
-      "unicorn/no-array-reduce": 0
-    }
   }
 }
