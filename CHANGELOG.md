@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.0.0 (22.02.2024)
+
+Improvements:
+
+- moved primary settings to configuration file;
+- added `--config` option to specify the path to the configuration file.
+
+Breaking changes:
+
+- drop support for Node.js 16;
+- updated the list of file categories for comparison.
+
+See [MIGRATION.md](./MIGRATION.md) for more info.
+
+
 ## 3.0.0 (29.08.2023)
 
 This package now pure ESM.
@@ -58,7 +73,7 @@ First major release.
 
 Added `--output` option for `snapshot` command.
 
-Improved documentation. Added LICENSE. Prepared the package to publish on GitHub. 
+Improved documentation. Added LICENSE. Prepared the package to publish on GitHub.
 
 
 ## 0.2.0 (30.10.2020)
