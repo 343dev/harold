@@ -1,6 +1,6 @@
 import { createSpinner } from 'nanospinner';
 
-import { pathToFileURL } from "node:url";
+import { pathToFileURL } from 'node:url';
 
 import buildProject from '../lib/build-project.js';
 import checkConfigPath from '../lib/check-config-path.js';
@@ -9,72 +9,72 @@ import generateSnapshot from '../lib/generate-snapshot.js';
 import writeSnapshotFile from '../lib/write-snapshot-file.js';
 
 export default async function snapshot(options) {
-  const config = await getConfig(options.config);
+	const config = await getConfig(options.config);
 
-  const build = {
-    env: { ...process.env, ...config?.build?.env },
-    command: options.exec || config?.build?.command,
-    path: options.path || config?.build?.path,
-    categories: config?.categories || {},
-    totalTime: undefined,
-    snapshot: undefined,
-    snapshotPath: options.output,
-  };
+	const build = {
+		env: { ...process.env, ...config?.build?.env },
+		command: options.exec || config?.build?.command,
+		path: options.path || config?.build?.path,
+		categories: config?.categories || {},
+		totalTime: undefined,
+		snapshot: undefined,
+		snapshotPath: options.output,
+	};
 
-  const spinner = createSpinner();
+	const spinner = createSpinner();
 
-  console.log();
-  console.log('Taking a snapshot...');
+	console.log();
+	console.log('Taking a snapshot...');
 
-  try {
-    spinner.start({ text: 'Build project' });
+	try {
+		spinner.start({ text: 'Build project' });
 
-    const buildStartTime = process.hrtime();
-    await buildProject(build.command, build.env);
-    build.totalTime = process.hrtime(buildStartTime);
+		const buildStartTime = process.hrtime();
+		await buildProject(build.command, build.env);
+		build.totalTime = process.hrtime(buildStartTime);
 
-    spinner.clear();
-  } catch (error) {
-    spinner.error();
-    throw error;
-  }
+		spinner.clear();
+	} catch (error) {
+		spinner.error();
+		throw error;
+	}
 
-  try {
-    spinner.start({ text: 'Generate snapshot' });
+	try {
+		spinner.start({ text: 'Generate snapshot' });
 
-    build.snapshot = generateSnapshot({
-      buildDirectory: build.path,
-      buildTime: build.totalTime,
-      categories: build.categories,
-    });
+		build.snapshot = generateSnapshot({
+			buildDirectory: build.path,
+			buildTime: build.totalTime,
+			categories: build.categories,
+		});
 
-    spinner.clear();
-  } catch (error) {
-    spinner.error();
-    throw error;
-  }
+		spinner.clear();
+	} catch (error) {
+		spinner.error();
+		throw error;
+	}
 
-  try {
-    spinner.start({ text: 'Save snapshot' });
+	try {
+		spinner.start({ text: 'Save snapshot' });
 
-    await writeSnapshotFile({
-      buildSnapshot: build.snapshot,
-      outputPath: build.snapshotPath,
-    });
+		await writeSnapshotFile({
+			buildSnapshot: build.snapshot,
+			outputPath: build.snapshotPath,
+		});
 
-    spinner.clear();
-  } catch (error) {
-    spinner.error();
-    throw error;
-  }
+		spinner.clear();
+	} catch (error) {
+		spinner.error();
+		throw error;
+	}
 
-  spinner.success({ text: 'Done!' });
-  console.log();
+	spinner.success({ text: 'Done!' });
+	console.log();
 }
 
 async function getConfig(filepath) {
-  const configFilepath = pathToFileURL( filepath ? checkConfigPath(filepath) : findConfig());
-  const configData = await import(configFilepath);
+	const configFilepath = pathToFileURL(filepath ? checkConfigPath(filepath) : findConfig());
+	const configData = await import(configFilepath);
 
-  return configData.default;
+	return configData.default;
 }
