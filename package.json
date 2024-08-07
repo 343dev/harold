@@ -1,6 +1,6 @@
 {
   "name": "@343dev/harold",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "Project bundle comparison tool",
   "keywords": [
     "front-end",
@@ -12,7 +12,7 @@
   "author": "Andrey Warkentin (https://github.com/343dev)",
   "repository": {
     "type": "git",
-    "url": "https://github.com/343dev/harold"
+    "url": "git+https://github.com/343dev/harold.git"
   },
   "bin": {
     "harold": "index.js"
@@ -34,7 +34,7 @@
     "node": ">=18.12"
   },
   "dependencies": {
-    "cli-table3": "^0.6.3",
+    "cli-table3": "^0.6.5",
     "commander": "^12.0.0",
     "fast-glob": "^3.3.2",
     "gzip-size": "^7.0.0",
@@ -43,12 +43,10 @@
     "signal-exit": "^4.1.0"
   },
   "devDependencies": {
-    "eslint": "^8.56.0",
-    "eslint-config-xo": "^0.44.0",
-    "eslint-plugin-import": "^2.29.1",
-    "eslint-plugin-unicorn": "^51.0.1",
-    "lint-staged": "^15.2.2",
-    "simple-git-hooks": "^2.9.0"
+    "@343dev/eslint-config": "^1.0.0",
+    "eslint": "^8.57.0",
+    "lint-staged": "^15.2.8",
+    "simple-git-hooks": "^2.11.1"
   },
   "lint-staged": {
     "*.js": "eslint --fix"
@@ -57,23 +55,6 @@
     "pre-commit": "npx lint-staged"
   },
   "eslintConfig": {
-    "env": {
-      "node": true
-    },
-    "extends": [
-      "xo",
-      "plugin:unicorn/recommended"
-    ],
-    "plugins": [
-      "import"
-    ],
-    "rules": {
-      "unicorn/no-array-reduce": "off",
-      "no-warning-comments": "off",
-      "object-curly-spacing": [
-        "error",
-        "always"
-      ]
-    }
+    "extends": "@343dev"
   }
 }
