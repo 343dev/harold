@@ -46,7 +46,7 @@
     "@343dev/eslint-config": "^1.0.0",
     "eslint": "^8.57.0",
     "lint-staged": "^15.2.2",
-    "simple-git-hooks": "^2.9.0"
+    "simple-git-hooks": "^2.11.1"
   },
   "lint-staged": {
     "*.js": "eslint --fix"
