@@ -12,7 +12,7 @@
   "author": "Andrey Warkentin (https://github.com/343dev)",
   "repository": {
     "type": "git",
-    "url": "https://github.com/343dev/harold"
+    "url": "git+https://github.com/343dev/harold.git"
   },
   "bin": {
     "harold": "index.js"
