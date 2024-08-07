@@ -34,7 +34,7 @@
     "node": ">=18.12"
   },
   "dependencies": {
-    "cli-table3": "^0.6.3",
+    "cli-table3": "^0.6.5",
     "commander": "^12.0.0",
     "fast-glob": "^3.3.2",
     "gzip-size": "^7.0.0",
