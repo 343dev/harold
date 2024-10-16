@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.3 (2024-10-16)
+
+- Fixed applying default settings
+
+
 ## 4.0.0 (22.02.2024)
 
 Improvements:
