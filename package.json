@@ -23,6 +23,7 @@
     "lib/",
     "tasks/",
     "index.js",
+    ".haroldrc.js",
     "MIGRATION.md"
   ],
   "scripts": {
