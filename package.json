@@ -54,8 +54,5 @@
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged"
-  },
-  "eslintConfig": {
-    "extends": "@343dev"
   }
 }
