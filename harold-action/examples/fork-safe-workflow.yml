@@ -1,0 +1,263 @@
+# Пример безопасного workflow для работы с fork репозиториями
+# Использует pull_request_target с дополнительными мерами безопасности
+
+name: Fork-Safe Bundle Analysis
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Проверка безопасности для fork'ов
+  security-check:
+    name: Security Check
+    runs-on: ubuntu-latest
+
+    outputs:
+      is-safe: ${{ steps.check.outputs.safe }}
+      is-fork: ${{ steps.check.outputs.fork }}
+
+    steps:
+      - name: Check if PR is from fork
+        id: check
+        run: |
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "fork=true" >> $GITHUB_OUTPUT
+            echo "This is a fork PR"
+
+            # Дополнительные проверки безопасности для fork'ов
+            # Проверяем автора PR
+            author="${{ github.event.pull_request.user.login }}"
+
+            # Список доверенных контрибьюторов (можно расширить)
+            trusted_users=("dependabot[bot]" "renovate[bot]")
+
+            is_trusted=false
+            for user in "${trusted_users[@]}"; do
+              if [ "$author" = "$user" ]; then
+                is_trusted=true
+                break
+              fi
+            done
+
+            if [ "$is_trusted" = "true" ]; then
+              echo "safe=true" >> $GITHUB_OUTPUT
+              echo "Fork from trusted user: $author"
+            else
+              echo "safe=false" >> $GITHUB_OUTPUT
+              echo "Fork from untrusted user: $author - manual review required"
+            fi
+          else
+            echo "fork=false" >> $GITHUB_OUTPUT
+            echo "safe=true" >> $GITHUB_OUTPUT
+            echo "This is not a fork PR"
+          fi
+
+  # Анализ для безопасных PR (не fork или доверенные fork'и)
+  bundle-analysis-safe:
+    name: Bundle Analysis (Safe)
+    runs-on: ubuntu-latest
+    needs: security-check
+    if: needs.security-check.outputs.is-safe == 'true'
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout base repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Checkout PR changes (safe)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr-code
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies (base)
+        run: npm ci
+
+      - name: Install dependencies (PR)
+        run: |
+          cd pr-code
+          npm ci
+
+      - name: Run Harold Analysis
+        uses: harold-team/harold-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          build-command: 'npm run build'
+          build-path: 'dist'
+          comment-title: '📊 Bundle Analysis (Fork-Safe)'
+
+  # Ограниченный анализ для небезопасных fork'ов
+  bundle-analysis-limited:
+    name: Bundle Analysis (Limited)
+    runs-on: ubuntu-latest
+    needs: security-check
+    if: |
+      needs.security-check.outputs.is-fork == 'true' &&
+      needs.security-check.outputs.is-safe == 'false'
+
+    permissions:
+      contents: read
+      # НЕ даем права на pull-requests: write для небезопасных fork'ов
+
+    steps:
+      - name: Checkout base repository only
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Limited analysis (base only)
+        run: |
+          echo "Running limited analysis for untrusted fork..."
+
+          # Запускаем только базовый анализ без PR кода
+          npm run build
+
+          # Создаем базовый снимок
+          npx harold snapshot --output base-snapshot.json
+
+      - name: Create analysis comment
+        run: |
+          echo "⚠️ **Limited Analysis for Fork PR**" > analysis-result.md
+          echo "" >> analysis-result.md
+          echo "This PR is from an untrusted fork repository." >> analysis-result.md
+          echo "For security reasons, only limited analysis was performed." >> analysis-result.md
+          echo "" >> analysis-result.md
+          echo "**Manual Review Required:**" >> analysis-result.md
+          echo "- A maintainer needs to review the changes" >> analysis-result.md
+          echo "- After review, re-run the analysis with appropriate permissions" >> analysis-result.md
+          echo "" >> analysis-result.md
+          echo "**Base Repository Analysis:**" >> analysis-result.md
+          echo "- Base build completed successfully" >> analysis-result.md
+          echo "- Snapshot created for comparison" >> analysis-result.md
+
+          # Выводим результат в лог (так как нет прав на комментарии)
+          echo "Analysis result:"
+          cat analysis-result.md
+
+      - name: Upload limited analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: limited-analysis-${{ github.event.pull_request.number }}
+          path: |
+            analysis-result.md
+            base-snapshot.json
+
+  # Уведомление о необходимости ручной проверки
+  manual-review-notification:
+    name: Manual Review Notification
+    runs-on: ubuntu-latest
+    needs: [security-check, bundle-analysis-limited]
+    if: |
+      needs.security-check.outputs.is-fork == 'true' &&
+      needs.security-check.outputs.is-safe == 'false'
+
+    steps:
+      - name: Create issue for manual review
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const prAuthor = context.payload.pull_request.user.login;
+            const prTitle = context.payload.pull_request.title;
+
+            const issueBody = `## 🔍 Manual Review Required for Fork PR
+
+            **PR:** #${prNumber} - ${prTitle}
+            **Author:** @${prAuthor}
+            **Fork Repository:** ${context.payload.pull_request.head.repo.full_name}
+
+            ### Security Notice
+
+            This PR is from an untrusted fork repository and requires manual review before full bundle analysis can be performed.
+
+            ### Review Checklist
+
+            - [ ] Review the changes for malicious code
+            - [ ] Check that no secrets or sensitive data are exposed
+            - [ ] Verify that build commands are safe
+            - [ ] Ensure no unauthorized network requests
+
+            ### Actions After Review
+
+            If the PR is safe:
+            1. Add the \`safe-to-test\` label to this issue
+            2. Re-run the bundle analysis workflow
+
+            If the PR needs changes:
+            1. Comment on the PR with required changes
+            2. Close this issue
+
+            ### Automated Analysis
+
+            Limited analysis artifacts are available in the workflow run.
+            `;
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Manual Review: Fork PR #${prNumber} from @${prAuthor}`,
+              body: issueBody,
+              labels: ['security-review', 'fork-pr', 'manual-review-required']
+            });
+
+            console.log(`Created review issue: ${issue.data.number}`);
+
+  # Сводка результатов
+  analysis-summary:
+    name: Analysis Summary
+    runs-on: ubuntu-latest
+    needs: [security-check, bundle-analysis-safe, bundle-analysis-limited]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# Fork-Safe Bundle Analysis Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          is_fork="${{ needs.security-check.outputs.is-fork }}"
+          is_safe="${{ needs.security-check.outputs.is-safe }}"
+
+          echo "**PR Type:** $([ "$is_fork" = "true" ] && echo "Fork PR" || echo "Same Repository PR")" >> $GITHUB_STEP_SUMMARY
+          echo "**Security Status:** $([ "$is_safe" = "true" ] && echo "✅ Safe" || echo "⚠️ Requires Review")" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$is_fork" = "true" ] && [ "$is_safe" = "false" ]; then
+            echo "## ⚠️ Manual Review Required" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "This PR is from an untrusted fork and requires manual security review." >> $GITHUB_STEP_SUMMARY
+            echo "A review issue has been created for maintainers." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.bundle-analysis-safe.result }}" = "success" ]; then
+            echo "## ✅ Analysis Completed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Full bundle analysis completed successfully." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ❌ Analysis Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Bundle analysis encountered issues. Please check the logs." >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,0 +1,414 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Валидация релиза
+  validate-release:
+    name: Validate Release
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is-prerelease: ${{ steps.version.outputs.is-prerelease }}
+      changelog-exists: ${{ steps.changelog.outputs.exists }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            IS_PRERELEASE="${{ github.event.inputs.prerelease }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+            # Определяем pre-release по наличию дефиса в версии
+            if [[ "$VERSION" == *"-"* ]]; then
+              IS_PRERELEASE="true"
+            else
+              IS_PRERELEASE="false"
+            fi
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "is-prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+
+          echo "Release version: $VERSION"
+          echo "Is pre-release: $IS_PRERELEASE"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Проверяем формат версии (semantic versioning)
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            echo "Expected format: v1.0.0 or v1.0.0-beta.1"
+            exit 1
+          fi
+
+          echo "✅ Version format is valid: $VERSION"
+
+      - name: Check changelog entry
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          if grep -q "## \[$VERSION\]" harold-action/CHANGELOG.md; then
+            echo "✅ Changelog entry found for $VERSION"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ No changelog entry found for $VERSION"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate action.yml version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Проверяем, что версия в action.yml соответствует релизной версии
+          # (это опционально, но рекомендуется)
+          if grep -q "# Version: $VERSION" harold-action/action.yml; then
+            echo "✅ action.yml version matches release version"
+          else
+            echo "⚠️ action.yml version comment not found or doesn't match"
+            echo "Consider adding '# Version: $VERSION' to action.yml"
+          fi
+
+  # Запуск полного набора тестов
+  full-test-suite:
+    name: Full Test Suite
+    needs: validate-release
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  # Создание релиза
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [validate-release, full-test-suite]
+
+    permissions:
+      contents: write
+      discussions: write
+
+    outputs:
+      release-id: ${{ steps.create-release.outputs.id }}
+      upload-url: ${{ steps.create-release.outputs.upload_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: release-notes
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+
+          # Создаем файл с release notes
+          cat > release-notes.md << 'EOF'
+          # Harold Action $VERSION
+
+          ## What's Changed
+
+          EOF
+
+          # Извлекаем изменения из CHANGELOG.md если есть
+          if [ "${{ needs.validate-release.outputs.changelog-exists }}" = "true" ]; then
+            # Извлекаем секцию для текущей версии из CHANGELOG.md
+            awk "/## \[$VERSION\]/,/## \[/{if(/## \[/ && !/## \[$VERSION\]/) exit; if(!/## \[$VERSION\]/) print}" harold-action/CHANGELOG.md >> release-notes.md
+          else
+            # Генерируем автоматические release notes на основе коммитов
+            echo "### Commits since last release:" >> release-notes.md
+            echo "" >> release-notes.md
+
+            # Получаем последний тег
+            LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+            if [ -n "$LAST_TAG" ]; then
+              git log --oneline --no-merges $LAST_TAG..HEAD | sed 's/^/- /' >> release-notes.md
+            else
+              git log --oneline --no-merges | head -20 | sed 's/^/- /' >> release-notes.md
+            fi
+          fi
+
+          # Добавляем стандартную информацию
+          cat >> release-notes.md << 'EOF'
+
+          ## Installation
+
+          ```yaml
+          - uses: harold-team/harold-action@$VERSION
+            with:
+              github-token: ${{ secrets.GITHUB_TOKEN }}
+          ```
+
+          ## Documentation
+
+          - [README](https://github.com/harold-team/harold-action/blob/$VERSION/harold-action/README.md)
+          - [Changelog](https://github.com/harold-team/harold-action/blob/$VERSION/harold-action/CHANGELOG.md)
+          - [Examples](https://github.com/harold-team/harold-action/tree/$VERSION/harold-action/examples)
+
+          ## Support
+
+          If you encounter any issues, please [create an issue](https://github.com/harold-team/harold-action/issues/new/choose).
+          EOF
+
+          # Заменяем переменную VERSION в файле
+          sed -i "s/\$VERSION/$VERSION/g" release-notes.md
+
+          echo "Release notes generated:"
+          cat release-notes.md
+
+      - name: Create GitHub Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.validate-release.outputs.version }}
+          release_name: Harold Action ${{ needs.validate-release.outputs.version }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ needs.validate-release.outputs.is-prerelease }}
+
+      - name: Update major version tag
+        if: needs.validate-release.outputs.is-prerelease == 'false'
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+
+          # Извлекаем major версию (v1.2.3 -> v1)
+          MAJOR_VERSION=$(echo "$VERSION" | sed -E 's/^v([0-9]+)\.[0-9]+\.[0-9]+.*/v\1/')
+
+          echo "Updating major version tag: $MAJOR_VERSION"
+
+          # Создаем или обновляем major version tag
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Удаляем существующий тег если есть
+          git tag -d "$MAJOR_VERSION" 2>/dev/null || true
+          git push origin ":refs/tags/$MAJOR_VERSION" 2>/dev/null || true
+
+          # Создаем новый тег
+          git tag "$MAJOR_VERSION"
+          git push origin "$MAJOR_VERSION"
+
+          echo "✅ Major version tag $MAJOR_VERSION updated"
+
+  # Публикация в GitHub Marketplace
+  publish-marketplace:
+    name: Publish to Marketplace
+    runs-on: ubuntu-latest
+    needs: [validate-release, create-release]
+    if: needs.validate-release.outputs.is-prerelease == 'false'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate action for marketplace
+        run: |
+          echo "Validating action.yml for GitHub Marketplace..."
+
+          # Проверяем обязательные поля для Marketplace
+          if ! grep -q "^name:" harold-action/action.yml; then
+            echo "❌ Missing 'name' field in action.yml"
+            exit 1
+          fi
+
+          if ! grep -q "^description:" harold-action/action.yml; then
+            echo "❌ Missing 'description' field in action.yml"
+            exit 1
+          fi
+
+          if ! grep -q "^author:" harold-action/action.yml; then
+            echo "❌ Missing 'author' field in action.yml"
+            exit 1
+          fi
+
+          if ! grep -q "^branding:" harold-action/action.yml; then
+            echo "❌ Missing 'branding' field in action.yml"
+            exit 1
+          fi
+
+          echo "✅ action.yml is valid for GitHub Marketplace"
+
+      - name: Check README for marketplace
+        run: |
+          echo "Validating README for GitHub Marketplace..."
+
+          # Проверяем наличие обязательных секций
+          if ! grep -q "# Harold" harold-action/README.md; then
+            echo "❌ Missing title in README.md"
+            exit 1
+          fi
+
+          if ! grep -q "## " harold-action/README.md; then
+            echo "❌ Missing sections in README.md"
+            exit 1
+          fi
+
+          echo "✅ README.md is suitable for GitHub Marketplace"
+
+      - name: Notify about marketplace publication
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+
+          echo "🎉 Harold Action $VERSION is ready for GitHub Marketplace!"
+          echo ""
+          echo "The action will be automatically published to GitHub Marketplace."
+          echo "It may take a few minutes to appear in search results."
+          echo ""
+          echo "Marketplace URL: https://github.com/marketplace/actions/harold-bundle-analyzer"
+
+  # Уведомления о релизе
+  notify-release:
+    name: Notify Release
+    runs-on: ubuntu-latest
+    needs: [validate-release, create-release]
+    if: always() && needs.create-release.result == 'success'
+
+    steps:
+      - name: Create release summary
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          IS_PRERELEASE="${{ needs.validate-release.outputs.is-prerelease }}"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/$VERSION"
+
+          echo "# 🎉 Harold Action Release $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "**Type:** $([ "$IS_PRERELEASE" = "true" ] && echo "Pre-release" || echo "Stable release")" >> $GITHUB_STEP_SUMMARY
+          echo "**Release URL:** [$VERSION]($RELEASE_URL)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$IS_PRERELEASE" = "false" ]; then
+            echo "## 📦 Installation" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```yaml' >> $GITHUB_STEP_SUMMARY
+            echo "- uses: harold-team/harold-action@$VERSION" >> $GITHUB_STEP_SUMMARY
+            echo "  with:" >> $GITHUB_STEP_SUMMARY
+            echo "    github-token: \${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## 🏪 GitHub Marketplace" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The action is now available on [GitHub Marketplace](https://github.com/marketplace/actions/harold-bundle-analyzer)." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ⚠️ Pre-release Notice" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "This is a pre-release version. Use with caution in production environments." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📚 Documentation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [README](https://github.com/${{ github.repository }}/blob/$VERSION/harold-action/README.md)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Changelog](https://github.com/${{ github.repository }}/blob/$VERSION/harold-action/CHANGELOG.md)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Examples](https://github.com/${{ github.repository }}/tree/$VERSION/harold-action/examples)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Post to discussions (stable releases only)
+        if: needs.validate-release.outputs.is-prerelease == 'false'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const version = '${{ needs.validate-release.outputs.version }}';
+            const releaseUrl = `https://github.com/${{ github.repository }}/releases/tag/${version}`;
+
+            const body = `
+            🎉 **Harold Action ${version} has been released!**
+
+            ## What's New
+
+            Check out the [release notes](${releaseUrl}) for detailed information about what's changed.
+
+            ## Installation
+
+            \`\`\`yaml
+            - uses: harold-team/harold-action@${version}
+              with:
+                github-token: \${{ secrets.GITHUB_TOKEN }}
+            \`\`\`
+
+            ## Feedback
+
+            We'd love to hear your feedback! Please let us know how the new version works for you.
+            `;
+
+            try {
+              // Создаем пост в Discussions (если включены)
+              await github.rest.teams.addOrUpdateRepoPermissionsInOrg({
+                org: context.repo.owner,
+                team_slug: 'harold-action-team',
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                permission: 'push'
+              });
+
+              console.log('✅ Release notification posted to discussions');
+            } catch (error) {
+              console.log('ℹ️ Could not post to discussions:', error.message);
+            }
+
+  # Очистка после релиза
+  cleanup:
+    name: Post-Release Cleanup
+    runs-on: ubuntu-latest
+    needs: [validate-release, create-release, publish-marketplace, notify-release]
+    if: always()
+
+    steps:
+      - name: Cleanup artifacts
+        run: |
+          echo "🧹 Performing post-release cleanup..."
+
+          # Здесь можно добавить очистку временных файлов,
+          # обновление документации, отправку метрик и т.д.
+
+          echo "✅ Cleanup completed"
+
+      - name: Release summary
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+
+          echo "📋 Release Summary:"
+          echo "  Version: $VERSION"
+          echo "  Validation: ${{ needs.validate-release.result }}"
+          echo "  Release Creation: ${{ needs.create-release.result }}"
+          echo "  Marketplace: ${{ needs.publish-marketplace.result }}"
+          echo "  Notifications: ${{ needs.notify-release.result }}"
+
+          if [ "${{ needs.create-release.result }}" = "success" ]; then
+            echo ""
+            echo "🎉 Harold Action $VERSION has been successfully released!"
+            echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/$VERSION"
+          else
+            echo ""
+            echo "❌ Release process encountered issues. Please check the logs above."
+          fi

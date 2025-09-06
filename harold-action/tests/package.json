@@ -1,0 +1,40 @@
+{
+  "name": "harold-action-tests",
+  "version": "1.0.0",
+  "description": "Tests for Harold GitHub Action",
+  "private": true,
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest --testPathPattern=unit",
+    "test:integration": "jest --testPathPattern=integration",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.57.0",
+    "@types/jest": "^29.5.8"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverageFrom": [
+      "../utils/**/*.{js,cjs}",
+      "../scripts/**/*.{js,cjs}",
+      "!**/node_modules/**",
+      "!**/coverage/**"
+    ],
+    "coverageDirectory": "./coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "testMatch": [
+      "**/__tests__/**/*.(js|cjs)",
+      "**/*.(test|spec).(js|cjs)"
+    ],
+    "verbose": true
+  }
+}

@@ -1,0 +1,154 @@
+name: 🐛 Bug Report
+description: Сообщить об ошибке в Harold Action
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за сообщение об ошибке! Пожалуйста, заполните форму ниже, чтобы помочь нам быстрее решить проблему.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Описание ошибки
+      description: Четкое и краткое описание проблемы
+      placeholder: Опишите, что произошло...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Шаги для воспроизведения
+      description: Пошаговые инструкции для воспроизведения ошибки
+      placeholder: |
+        1. Перейти к '...'
+        2. Нажать на '...'
+        3. Прокрутить вниз до '...'
+        4. Увидеть ошибку
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидаемое поведение
+      description: Что должно было произойти?
+      placeholder: Опишите ожидаемый результат...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Фактическое поведение
+      description: Что произошло на самом деле?
+      placeholder: Опишите фактический результат...
+    validations:
+      required: true
+
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Конфигурация workflow
+      description: Ваш GitHub Actions workflow файл
+      render: yaml
+      placeholder: |
+        name: Bundle Analysis
+        on:
+          pull_request:
+        jobs:
+          analyze:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: harold-team/harold-action@v1
+                with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи
+      description: Соответствующие логи из GitHub Actions
+      render: text
+      placeholder: Вставьте логи здесь...
+
+  - type: dropdown
+    id: project-type
+    attributes:
+      label: Тип проекта
+      description: Какой тип проекта вы анализируете?
+      options:
+        - React
+        - Vue.js
+        - Angular
+        - Next.js
+        - Vanilla JavaScript
+        - TypeScript
+        - Монорепозиторий
+        - Библиотека
+        - Другое
+    validations:
+      required: true
+
+  - type: input
+    id: harold-version
+    attributes:
+      label: Версия Harold Action
+      description: Какую версию Harold Action вы используете?
+      placeholder: v1.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: runner-os
+    attributes:
+      label: Операционная система runner'а
+      description: На какой ОС запускается ваш GitHub Actions runner?
+      options:
+        - ubuntu-latest
+        - ubuntu-20.04
+        - ubuntu-18.04
+        - windows-latest
+        - windows-2019
+        - macos-latest
+        - macos-11
+        - self-hosted
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Версия Node.js
+      description: Какую версию Node.js вы используете?
+      placeholder: 18.12.0
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Дополнительный контекст
+      description: Любая другая информация, которая может помочь в решении проблемы
+      placeholder: |
+        - Размер проекта (количество файлов)
+        - Используемые инструменты сборки
+        - Особенности конфигурации
+        - Скриншоты (если применимо)
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Подтверждение
+      description: Пожалуйста, подтвердите следующее
+      options:
+        - label: Я проверил существующие issues и не нашел дубликатов
+          required: true
+        - label: Я использую последнюю версию Harold Action
+          required: true
+        - label: Я предоставил всю необходимую информацию
+          required: true

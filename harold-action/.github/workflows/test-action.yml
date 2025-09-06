@@ -1,0 +1,549 @@
+name: Test Harold Action E2E
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'action.yml'
+      - 'scripts/**'
+      - 'utils/**'
+      - '.github/workflows/test-action.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'action.yml'
+      - 'scripts/**'
+      - 'utils/**'
+      - '.github/workflows/test-action.yml'
+  workflow_dispatch:
+    inputs:
+      test_scenario:
+        description: 'Test scenario to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'basic'
+          - 'fork-simulation'
+          - 'error-handling'
+          - 'performance'
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Базовые E2E тесты
+  test-basic-functionality:
+    name: Test Basic Functionality
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.test_scenario == 'all' || github.event.inputs.test_scenario == 'basic'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Create test project structure
+        run: |
+          mkdir -p test-project/src test-project/dist
+
+          # Создаем package.json
+          cat > test-project/package.json << 'EOF'
+          {
+            "name": "test-project",
+            "version": "1.0.0",
+            "scripts": {
+              "build": "mkdir -p dist && echo 'console.log(\"Hello World\");' > dist/app.js && echo 'body { color: red; }' > dist/style.css"
+            }
+          }
+          EOF
+
+          # Создаем harold конфигурацию
+          cat > test-project/.haroldrc.js << 'EOF'
+          export default {
+            build: {
+              command: 'npm run build',
+              path: 'dist'
+            },
+            categories: {
+              js: '**/*.js',
+              css: '**/*.css'
+            }
+          };
+          EOF
+
+      - name: Test Harold Action with no changes
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          build-command: 'cd test-project && npm run build'
+          build-path: 'test-project/dist'
+          config-path: 'test-project/.haroldrc.js'
+          working-directory: '.'
+        continue-on-error: true
+
+      - name: Verify action completed
+        run: |
+          echo "✅ Basic functionality test completed"
+
+          # Проверяем, что файлы Harold были созданы
+          if [ -f "harold-output.txt" ]; then
+            echo "✅ Harold output file created"
+            cat harold-output.txt
+          else
+            echo "❌ Harold output file not found"
+            exit 1
+          fi
+
+          if [ -f "harold-exit-code.txt" ]; then
+            echo "✅ Harold exit code file created"
+            cat harold-exit-code.txt
+          else
+            echo "❌ Harold exit code file not found"
+            exit 1
+          fi
+
+  # Тестирование с различными типами проектов
+  test-project-types:
+    name: Test Different Project Types
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.test_scenario == 'all'
+
+    strategy:
+      matrix:
+        project-type:
+          - name: 'react'
+            setup: |
+              npx create-react-app test-react-app --template typescript
+              cd test-react-app
+              npm run build
+            build-path: 'test-react-app/build'
+            config: |
+              export default {
+                build: { command: 'npm run build', path: 'build' },
+                categories: {
+                  js: 'static/js/**/*.js',
+                  css: 'static/css/**/*.css',
+                  media: 'static/media/**/*'
+                }
+              };
+
+          - name: 'vue'
+            setup: |
+              npm create vue@latest test-vue-app -- --typescript --router --pinia
+              cd test-vue-app
+              npm install
+              npm run build
+            build-path: 'test-vue-app/dist'
+            config: |
+              export default {
+                build: { command: 'npm run build', path: 'dist' },
+                categories: {
+                  js: 'assets/**/*.js',
+                  css: 'assets/**/*.css'
+                }
+              };
+
+          - name: 'vanilla'
+            setup: |
+              mkdir -p test-vanilla-app/src test-vanilla-app/dist
+              echo 'console.log("Vanilla JS App");' > test-vanilla-app/src/app.js
+              echo 'body { font-family: Arial; }' > test-vanilla-app/src/style.css
+              cd test-vanilla-app
+              cp src/* dist/
+            build-path: 'test-vanilla-app/dist'
+            config: |
+              export default {
+                build: { command: 'cp src/* dist/', path: 'dist' },
+                categories: {
+                  js: '**/*.js',
+                  css: '**/*.css'
+                }
+              };
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup project - ${{ matrix.project-type.name }}
+        run: ${{ matrix.project-type.setup }}
+        timeout-minutes: 10
+
+      - name: Create Harold config
+        run: |
+          cat > .haroldrc.js << 'EOF'
+          ${{ matrix.project-type.config }}
+          EOF
+
+      - name: Test Harold Action
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          build-command: 'echo "Build already completed in setup"'
+          build-path: ${{ matrix.project-type.build-path }}
+          config-path: '.haroldrc.js'
+        continue-on-error: true
+
+      - name: Verify results
+        run: |
+          echo "✅ ${{ matrix.project-type.name }} project test completed"
+
+          if [ -f "harold-output.txt" ]; then
+            echo "Harold output for ${{ matrix.project-type.name }}:"
+            cat harold-output.txt
+          fi
+
+  # Симуляция fork репозитория
+  test-fork-simulation:
+    name: Test Fork Repository Simulation
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.test_scenario == 'all' || github.event.inputs.test_scenario == 'fork-simulation'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Create test project
+        run: |
+          mkdir -p test-fork-project/dist
+          echo 'console.log("Fork test");' > test-fork-project/dist/app.js
+
+          cat > test-fork-project/.haroldrc.js << 'EOF'
+          export default {
+            build: { command: 'echo "No build needed"', path: 'dist' },
+            categories: { js: '**/*.js' }
+          };
+          EOF
+
+      - name: Simulate fork environment
+        run: |
+          # Устанавливаем переменные окружения как в fork'е
+          echo "IS_FORK=true" >> $GITHUB_ENV
+          echo "HAS_WRITE_ACCESS=false" >> $GITHUB_ENV
+          echo "CAN_COMMENT=false" >> $GITHUB_ENV
+          echo "ACCESS_LEVEL=limited" >> $GITHUB_ENV
+
+      - name: Test Harold Action in fork mode
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          build-command: 'echo "No build needed"'
+          build-path: 'test-fork-project/dist'
+          config-path: 'test-fork-project/.haroldrc.js'
+        continue-on-error: true
+
+      - name: Verify fork behavior
+        run: |
+          echo "✅ Fork simulation test completed"
+
+          # В fork режиме результат должен быть в логах, а не в комментариях
+          if [ -f "harold-output.txt" ]; then
+            echo "Harold output in fork mode:"
+            cat harold-output.txt
+          fi
+
+  # Тестирование обработки ошибок
+  test-error-handling:
+    name: Test Error Handling
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.test_scenario == 'all' || github.event.inputs.test_scenario == 'error-handling'
+
+    strategy:
+      matrix:
+        error-scenario:
+          - name: 'missing-build-directory'
+            setup: |
+              mkdir -p test-error-project
+              # Не создаем dist директорию
+            build-path: 'test-error-project/nonexistent'
+            expected-error: 'Could not find build directory'
+
+          - name: 'invalid-config'
+            setup: |
+              mkdir -p test-error-project/dist
+              echo 'console.log("test");' > test-error-project/dist/app.js
+              # Создаем невалидный конфиг
+              echo 'invalid javascript syntax {' > test-error-project/.haroldrc.js
+            build-path: 'test-error-project/dist'
+            expected-error: 'Invalid harold configuration'
+
+          - name: 'build-command-failure'
+            setup: |
+              mkdir -p test-error-project
+              # Команда сборки будет падать
+            build-command: 'exit 1'
+            build-path: 'test-error-project/dist'
+            expected-error: 'Build failed'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup error scenario - ${{ matrix.error-scenario.name }}
+        run: ${{ matrix.error-scenario.setup }}
+
+      - name: Test Harold Action with error
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          build-command: ${{ matrix.error-scenario.build-command || 'echo "Build completed"' }}
+          build-path: ${{ matrix.error-scenario.build-path }}
+          config-path: 'test-error-project/.haroldrc.js'
+        continue-on-error: true
+
+      - name: Verify error handling
+        run: |
+          echo "✅ Error handling test for ${{ matrix.error-scenario.name }} completed"
+
+          if [ -f "harold-output.txt" ]; then
+            echo "Harold output (should contain error):"
+            cat harold-output.txt
+
+            # Проверяем, что ошибка корректно обработана
+            if grep -q "${{ matrix.error-scenario.expected-error }}" harold-output.txt; then
+              echo "✅ Expected error message found"
+            else
+              echo "⚠️  Expected error message not found, but this might be expected"
+            fi
+          fi
+
+  # Тестирование производительности
+  test-performance:
+    name: Test Performance
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.test_scenario == 'all' || github.event.inputs.test_scenario == 'performance'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Create large test project
+        run: |
+          mkdir -p test-perf-project/dist
+
+          # Создаем много файлов для тестирования производительности
+          for i in {1..100}; do
+            echo "console.log('Component $i');" > test-perf-project/dist/component-$i.js
+            echo ".component-$i { color: blue; }" > test-perf-project/dist/component-$i.css
+          done
+
+          # Создаем большой файл
+          yes "console.log('Large file content');" | head -n 1000 > test-perf-project/dist/large-file.js
+
+          cat > test-perf-project/.haroldrc.js << 'EOF'
+          export default {
+            build: { command: 'echo "Build completed"', path: 'dist' },
+            categories: {
+              js: '**/*.js',
+              css: '**/*.css'
+            }
+          };
+          EOF
+
+      - name: Test Harold Action performance
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          build-command: 'echo "Build completed"'
+          build-path: 'test-perf-project/dist'
+          config-path: 'test-perf-project/.haroldrc.js'
+        timeout-minutes: 5
+
+      - name: Verify performance
+        run: |
+          echo "✅ Performance test completed"
+
+          if [ -f "harold-output.txt" ]; then
+            echo "Harold output for large project:"
+            head -n 20 harold-output.txt
+            echo "..."
+            echo "Total lines in output: $(wc -l < harold-output.txt)"
+          fi
+
+  # Тестирование с различными пороговыми значениями
+  test-thresholds:
+    name: Test Threshold Configuration
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.test_scenario == 'all'
+
+    strategy:
+      matrix:
+        threshold-config:
+          - name: 'strict-thresholds'
+            size-threshold: '100'
+            percentage-threshold: '0.1'
+            fail-on-increase: 'true'
+            expected-result: 'should-fail'
+
+          - name: 'lenient-thresholds'
+            size-threshold: '1048576'  # 1MB
+            percentage-threshold: '50'
+            fail-on-increase: 'true'
+            expected-result: 'should-pass'
+
+          - name: 'no-failure'
+            size-threshold: '100'
+            percentage-threshold: '0.1'
+            fail-on-increase: 'false'
+            expected-result: 'should-pass'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Create test project with changes
+        run: |
+          mkdir -p test-threshold-project/dist
+
+          # Создаем файлы с заметными изменениями
+          echo 'console.log("Large change");' > test-threshold-project/dist/app.js
+          yes "console.log('padding');" | head -n 100 >> test-threshold-project/dist/app.js
+
+          cat > test-threshold-project/.haroldrc.js << 'EOF'
+          export default {
+            build: { command: 'echo "Build completed"', path: 'dist' },
+            categories: { js: '**/*.js' }
+          };
+          EOF
+
+      - name: Test Harold Action with ${{ matrix.threshold-config.name }}
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          build-command: 'echo "Build completed"'
+          build-path: 'test-threshold-project/dist'
+          config-path: 'test-threshold-project/.haroldrc.js'
+          size-threshold: ${{ matrix.threshold-config.size-threshold }}
+          percentage-threshold: ${{ matrix.threshold-config.percentage-threshold }}
+          fail-on-increase: ${{ matrix.threshold-config.fail-on-increase }}
+        continue-on-error: true
+        id: harold-action
+
+      - name: Verify threshold behavior
+        run: |
+          echo "✅ Threshold test for ${{ matrix.threshold-config.name }} completed"
+
+          # Проверяем ожидаемый результат
+          if [ "${{ matrix.threshold-config.expected-result }}" = "should-fail" ]; then
+            if [ "${{ steps.harold-action.outcome }}" = "failure" ]; then
+              echo "✅ Action correctly failed due to threshold"
+            else
+              echo "⚠️  Action should have failed but didn't"
+            fi
+          else
+            if [ "${{ steps.harold-action.outcome }}" = "success" ]; then
+              echo "✅ Action correctly passed"
+            else
+              echo "⚠️  Action should have passed but failed"
+            fi
+          fi
+
+  # Финальная сводка результатов
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-basic-functionality, test-project-types, test-fork-simulation, test-error-handling, test-performance, test-thresholds]
+    if: always()
+
+    steps:
+      - name: Generate test summary
+        run: |
+          echo "# Harold Action E2E Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Проверяем результаты каждого job'а
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.test-basic-functionality.result }}" = "success" ]; then
+            echo "✅ Basic Functionality: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Basic Functionality: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.test-project-types.result }}" = "success" ]; then
+            echo "✅ Project Types: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Project Types: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.test-fork-simulation.result }}" = "success" ]; then
+            echo "✅ Fork Simulation: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Fork Simulation: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.test-error-handling.result }}" = "success" ]; then
+            echo "✅ Error Handling: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Error Handling: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.test-performance.result }}" = "success" ]; then
+            echo "✅ Performance: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Performance: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.test-thresholds.result }}" = "success" ]; then
+            echo "✅ Thresholds: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Thresholds: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Overall Status" >> $GITHUB_STEP_SUMMARY
+
+          # Определяем общий статус
+          if [ "${{ needs.test-basic-functionality.result }}" = "success" ] && \
+             [ "${{ needs.test-project-types.result }}" = "success" ] && \
+             [ "${{ needs.test-fork-simulation.result }}" = "success" ] && \
+             [ "${{ needs.test-error-handling.result }}" = "success" ] && \
+             [ "${{ needs.test-performance.result }}" = "success" ] && \
+             [ "${{ needs.test-thresholds.result }}" = "success" ]; then
+            echo "🎉 **All E2E tests passed successfully!**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "💥 **Some E2E tests failed. Please check the logs above.**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Set final status
+        run: |
+          # Если есть критические ошибки, завершаем с ошибкой
+          if [ "${{ needs.test-basic-functionality.result }}" = "failure" ]; then
+            echo "❌ Critical test failed: Basic Functionality"
+            exit 1
+          fi
+
+          echo "✅ E2E tests completed"

@@ -1,0 +1,82 @@
+# Продвинутый пример использования Harold Action
+# Включает кастомные настройки, пороговые значения и интеграцию с другими Actions
+
+name: Advanced Bundle Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  analyze-bundle:
+    name: Advanced Bundle Analysis
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm run build:deps
+
+      - name: Build project
+        run: |
+          npm run build:production
+          npm run optimize
+
+      - name: Analyze bundle size with custom settings
+        uses: harold-team/harold-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          build-command: 'echo "Build already completed"'
+          build-path: 'build'
+          config-path: '.harold-config.js'
+          comment-title: '📊 Production Bundle Analysis'
+          fail-on-increase: 'true'
+          size-threshold: '50000'  # 50KB
+          percentage-threshold: '10'  # 10%
+          working-directory: '.'
+
+      - name: Upload bundle analysis artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-analysis-${{ github.run_number }}
+          path: |
+            harold-output.txt
+            harold-exit-code.txt
+            base-snapshot.json
+            pr-snapshot.json
+          retention-days: 30
+
+      - name: Notify on significant changes
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '⚠️ **Bundle size increased significantly!** Please review the changes and consider optimization.'
+            })

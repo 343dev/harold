@@ -1,0 +1,157 @@
+name: 'Harold Bundle Analyzer'
+description: 'Automatically analyze and report bundle size changes in Pull Requests with detailed insights and performance optimizations'
+author: 'Harold Team'
+branding:
+  icon: 'bar-chart-2'
+  color: 'blue'
+
+inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+    default: ${{ github.token }}
+
+  build-command:
+    description: 'Command to build the project'
+    required: false
+    default: 'npm run build'
+
+  build-path:
+    description: 'Path to build output directory'
+    required: false
+    default: 'dist'
+
+  config-path:
+    description: 'Path to harold configuration file'
+    required: false
+    default: '.haroldrc.js'
+
+  comment-title:
+    description: 'Title for the PR comment'
+    required: false
+    default: '📊 Bundle Size Report'
+
+  fail-on-increase:
+    description: 'Fail the action if bundle size increases'
+    required: false
+    default: 'false'
+
+  size-threshold:
+    description: 'Size increase threshold in bytes to trigger warning'
+    required: false
+    default: '10240'
+
+  percentage-threshold:
+    description: 'Percentage increase threshold to trigger warning'
+    required: false
+    default: '5'
+
+  working-directory:
+    description: 'Working directory for the action'
+    required: false
+    default: '.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Mask Secrets
+      shell: bash
+      run: ${{ github.action_path }}/scripts/mask-secrets.sh
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        BUILD_COMMAND: ${{ inputs.build-command }}
+
+    - name: Security Check
+      shell: bash
+      run: ${{ github.action_path }}/scripts/security-check.sh
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        BUILD_COMMAND: ${{ inputs.build-command }}
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        CONFIG_PATH: ${{ inputs.config-path }}
+        SIZE_THRESHOLD: ${{ inputs.size-threshold }}
+        PERCENTAGE_THRESHOLD: ${{ inputs.percentage-threshold }}
+        FAIL_ON_INCREASE: ${{ inputs.fail-on-increase }}
+
+    - name: Early Exit Check
+      shell: bash
+      run: ${{ github.action_path }}/scripts/early-exit-check.sh
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+
+    - name: Validate GitHub Token
+      shell: bash
+      run: ${{ github.action_path }}/scripts/token-validation.sh
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      if: env.EARLY_EXIT != 'true'
+
+    - name: Setup Harold
+      shell: bash
+      run: ${{ github.action_path }}/scripts/setup.sh
+      if: env.EARLY_EXIT != 'true'
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.npm
+          node_modules
+          .harold-cache
+        key: ${{ runner.os }}-harold-${{ hashFiles('**/package-lock.json', '.haroldrc.*') }}
+        restore-keys: |
+          ${{ runner.os }}-harold-
+      if: env.EARLY_EXIT != 'true'
+
+    - name: Optimized Checkout
+      shell: bash
+      run: ${{ github.action_path }}/scripts/optimized-checkout.sh
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      if: env.EARLY_EXIT != 'true'
+
+    - name: Parallel Build and Snapshot (Cached)
+      shell: bash
+      run: ${{ github.action_path }}/scripts/parallel-build-cached.sh
+      env:
+        BUILD_COMMAND: ${{ inputs.build-command }}
+        BUILD_PATH: ${{ inputs.build-path }}
+        CONFIG_PATH: ${{ inputs.config-path }}
+        ENABLE_CACHING: 'true'
+      if: env.EARLY_EXIT != 'true' && env.ENABLE_PARALLEL_BUILD == 'true'
+
+    - name: Sequential Build and Snapshot (Cached Fallback)
+      shell: bash
+      run: |
+        ${{ github.action_path }}/scripts/build-and-snapshot-cached.sh base
+        ${{ github.action_path }}/scripts/build-and-snapshot-cached.sh pr
+      env:
+        BUILD_COMMAND: ${{ inputs.build-command }}
+        BUILD_PATH: ${{ inputs.build-path }}
+        CONFIG_PATH: ${{ inputs.config-path }}
+        WORKING_DIR: base-branch/${{ inputs.working-directory }}
+        ENABLE_CACHING: 'true'
+      if: env.EARLY_EXIT != 'true' && env.ENABLE_PARALLEL_BUILD != 'true'
+
+    - name: Generate harold diff output
+      shell: bash
+      run: ${{ github.action_path }}/scripts/run-harold-diff.sh
+      id: harold-diff
+      if: env.EARLY_EXIT != 'true'
+
+    - name: Update PR comment
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const script = require('${{ github.action_path }}/scripts/comment.cjs')
+          await script({
+            github,
+            context,
+            core,
+            commentTitle: '${{ inputs.comment-title }}',
+            sizeThreshold: parseInt('${{ inputs.size-threshold }}'),
+            percentageThreshold: parseFloat('${{ inputs.percentage-threshold }}'),
+            failOnIncrease: '${{ inputs.fail-on-increase }}' === 'true'
+          })

@@ -1,0 +1,17 @@
+{
+  "name": "harold-action-test-project",
+  "version": "1.0.0",
+  "description": "Test project for Harold Action E2E tests",
+  "scripts": {
+    "build": "mkdir -p dist && npm run build:js && npm run build:css",
+    "build:js": "echo 'console.log(\"Hello from Harold Action test!\");' > dist/app.js && echo 'const utils = { test: true };' > dist/utils.js",
+    "build:css": "echo 'body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }' > dist/style.css",
+    "build:large": "npm run build && npm run build:large-files",
+    "build:large-files": "yes 'console.log(\"Large file content\");' | head -n 1000 > dist/large.js",
+    "build:fail": "exit 1",
+    "test": "echo 'Tests would run here'"
+  },
+  "devDependencies": {
+    "@343dev/harold": "^1.0.0"
+  }
+}

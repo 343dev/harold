@@ -1,0 +1,228 @@
+# Пример интеграции Harold Action с процессом деплоя
+# Блокирует деплой при значительном увеличении размера бандла
+
+name: Bundle Analysis with Deployment Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Анализ размера бандла
+  bundle-analysis:
+    name: Bundle Size Analysis
+    runs-on: ubuntu-latest
+
+    outputs:
+      analysis-passed: ${{ steps.harold.outcome == 'success' }}
+      bundle-size-ok: ${{ steps.harold.outcome == 'success' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for production
+        run: |
+          npm run build:production
+          npm run analyze
+
+      - name: Run Harold bundle analysis
+        id: harold
+        uses: harold-team/harold-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          build-command: 'echo "Build completed"'
+          build-path: 'dist'
+          config-path: '.haroldrc.production.js'
+          comment-title: '📊 Production Bundle Analysis'
+          fail-on-increase: 'true'
+          size-threshold: '100000'  # 100KB
+          percentage-threshold: '20'  # 20%
+
+      - name: Upload bundle stats
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-stats-${{ github.sha }}
+          path: |
+            dist/
+            harold-output.txt
+            base-snapshot.json
+            pr-snapshot.json
+
+  # Проверка производительности
+  performance-check:
+    name: Performance Check
+    runs-on: ubuntu-latest
+    needs: bundle-analysis
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download bundle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: bundle-stats-${{ github.sha }}
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v10
+        with:
+          configPath: './lighthouserc.json'
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+  # Деплой (только если анализ прошел успешно)
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [bundle-analysis, performance-check]
+    if: |
+      github.event_name == 'pull_request' &&
+      needs.bundle-analysis.outputs.analysis-passed == 'true'
+
+    environment:
+      name: staging
+      url: https://staging.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download bundle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: bundle-stats-${{ github.sha }}
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          # Здесь будет ваш скрипт деплоя
+          echo "✅ Deployed to staging"
+
+      - name: Update PR with deployment info
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🚀 **Staging Deployment Successful**
+
+              Bundle analysis passed all checks and the application has been deployed to staging.
+
+              📊 **Bundle Status**: ✅ Passed
+              🌐 **Staging URL**: https://staging.example.com
+              📦 **Artifacts**: Available in workflow run
+
+              The deployment is ready for testing!`
+            })
+
+  # Деплой в продакшн (только для main ветки)
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [bundle-analysis, performance-check]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      needs.bundle-analysis.outputs.bundle-size-ok == 'true'
+
+    environment:
+      name: production
+      url: https://example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download bundle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: bundle-stats-${{ github.sha }}
+
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment..."
+          # Здесь будет ваш скрипт деплоя в продакшн
+          echo "✅ Deployed to production"
+
+      - name: Notify deployment success
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Создаем issue для уведомления о деплое
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚀 Production Deployment - ${context.sha.substring(0, 7)}`,
+              body: `Production deployment completed successfully!
+
+              **Commit**: ${context.sha}
+              **Bundle Analysis**: ✅ Passed all checks
+              **Performance**: ✅ Lighthouse checks passed
+              **URL**: https://example.com
+
+              Bundle size is within acceptable limits.`,
+              labels: ['deployment', 'production']
+            })
+
+  # Блокировка деплоя при проблемах с размером бандла
+  deployment-gate:
+    name: Deployment Gate
+    runs-on: ubuntu-latest
+    needs: bundle-analysis
+    if: needs.bundle-analysis.outputs.analysis-passed != 'true'
+
+    steps:
+      - name: Block deployment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const message = `🚫 **Deployment Blocked**
+
+            The bundle size analysis failed, which means the deployment has been automatically blocked.
+
+            **Reasons for blocking:**
+            - Bundle size increased beyond acceptable thresholds
+            - Performance impact detected
+
+            **Next steps:**
+            1. Review the bundle analysis report above
+            2. Optimize your code to reduce bundle size
+            3. Consider code splitting or lazy loading
+            4. Remove unused dependencies
+
+            Once the bundle size is optimized, the deployment will proceed automatically.`;
+
+            if (context.eventName === 'pull_request') {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: message
+              });
+            }
+
+            core.setFailed('Deployment blocked due to bundle size increase');

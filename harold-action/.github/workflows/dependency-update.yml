@@ -1,0 +1,412 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Запускаем каждый понедельник в 9:00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      update_type:
+        description: 'Type of update to perform'
+        required: false
+        default: 'minor'
+        type: choice
+        options:
+          - 'patch'
+          - 'minor'
+          - 'major'
+          - 'all'
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Проверка доступных обновлений
+  check-updates:
+    name: Check Available Updates
+    runs-on: ubuntu-latest
+
+    outputs:
+      has-updates: ${{ steps.check.outputs.has-updates }}
+      update-summary: ${{ steps.check.outputs.summary }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'harold-action/tests/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd harold-action/tests
+          npm ci
+
+      - name: Check for outdated packages
+        id: check
+        run: |
+          cd harold-action/tests
+
+          echo "Checking for outdated packages..."
+
+          # Проверяем устаревшие пакеты
+          if npm outdated --json > outdated.json 2>/dev/null; then
+            echo "has-updates=false" >> $GITHUB_OUTPUT
+            echo "summary=All packages are up to date" >> $GITHUB_OUTPUT
+          else
+            # npm outdated возвращает код 1 если есть устаревшие пакеты
+            if [ -s outdated.json ]; then
+              echo "has-updates=true" >> $GITHUB_OUTPUT
+
+              # Создаем краткую сводку
+              summary=$(jq -r 'keys | join(", ")' outdated.json 2>/dev/null || echo "Multiple packages")
+              echo "summary=Updates available for: $summary" >> $GITHUB_OUTPUT
+
+              echo "📦 Outdated packages found:"
+              cat outdated.json | jq '.'
+            else
+              echo "has-updates=false" >> $GITHUB_OUTPUT
+              echo "summary=All packages are up to date" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Check GitHub Actions versions
+        run: |
+          echo "Checking GitHub Actions versions..."
+
+          # Проверяем версии actions в workflow файлах
+          find .github/workflows -name "*.yml" -o -name "*.yaml" | while read -r file; do
+            echo "Checking $file..."
+
+            # Извлекаем используемые actions
+            grep -E "uses: [^@]+@" "$file" | sed 's/.*uses: //' | sort -u | while read -r action; do
+              echo "  - $action"
+            done
+          done
+
+  # Обновление зависимостей
+  update-dependencies:
+    name: Update Dependencies
+    runs-on: ubuntu-latest
+    needs: check-updates
+    if: needs.check-updates.outputs.has-updates == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'harold-action/tests/package-lock.json'
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install dependencies
+        run: |
+          cd harold-action/tests
+          npm ci
+
+      - name: Update dependencies
+        run: |
+          cd harold-action/tests
+
+          UPDATE_TYPE="${{ github.event.inputs.update_type || 'minor' }}"
+
+          echo "Performing $UPDATE_TYPE updates..."
+
+          case "$UPDATE_TYPE" in
+            "patch")
+              # Обновляем только patch версии
+              npm update --save
+              ;;
+            "minor")
+              # Обновляем minor и patch версии
+              npx npm-check-updates -u --target minor
+              npm install
+              ;;
+            "major")
+              # Обновляем только major версии
+              npx npm-check-updates -u --target major
+              npm install
+              ;;
+            "all")
+              # Обновляем все до последних версий
+              npx npm-check-updates -u
+              npm install
+              ;;
+          esac
+
+      - name: Run tests after update
+        run: |
+          cd harold-action/tests
+
+          echo "Running tests to verify updates..."
+
+          # Запускаем тесты
+          if npm test; then
+            echo "✅ All tests passed after dependency updates"
+          else
+            echo "❌ Tests failed after dependency updates"
+            exit 1
+          fi
+
+      - name: Check for security vulnerabilities
+        run: |
+          cd harold-action/tests
+
+          echo "Checking for security vulnerabilities..."
+
+          # Проверяем уязвимости
+          if npm audit --audit-level moderate; then
+            echo "✅ No security vulnerabilities found"
+          else
+            echo "⚠️ Security vulnerabilities detected"
+
+            # Пытаемся автоматически исправить
+            npm audit fix --force || true
+
+            # Проверяем еще раз
+            if npm audit --audit-level moderate; then
+              echo "✅ Security vulnerabilities fixed"
+            else
+              echo "❌ Some security vulnerabilities remain"
+              npm audit
+            fi
+          fi
+
+      - name: Generate update summary
+        id: summary
+        run: |
+          cd harold-action/tests
+
+          # Создаем сводку изменений
+          cat > update-summary.md << 'EOF'
+          # Dependency Update Summary
+
+          ## Updated Packages
+
+          EOF
+
+          # Проверяем, какие пакеты изменились
+          if git diff --name-only | grep -q package.json; then
+            echo "The following packages were updated:" >> update-summary.md
+            echo "" >> update-summary.md
+
+            # Показываем изменения в package.json
+            git diff package.json | grep -E "^\+.*\".*\":" | sed 's/^+//' >> update-summary.md || true
+
+            echo "" >> update-summary.md
+          fi
+
+          # Добавляем информацию о тестах
+          echo "## Test Results" >> update-summary.md
+          echo "" >> update-summary.md
+          echo "✅ All tests passed after dependency updates" >> update-summary.md
+          echo "" >> update-summary.md
+
+          # Добавляем информацию о безопасности
+          echo "## Security Audit" >> update-summary.md
+          echo "" >> update-summary.md
+
+          if npm audit --audit-level moderate >/dev/null 2>&1; then
+            echo "✅ No security vulnerabilities detected" >> update-summary.md
+          else
+            echo "⚠️ Some security issues may remain - please review manually" >> update-summary.md
+          fi
+
+          echo "summary-file=update-summary.md" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            chore: update dependencies
+
+            - Updated npm packages to latest compatible versions
+            - All tests passing
+            - Security audit completed
+          title: 'chore: automated dependency updates'
+          body-path: harold-action/tests/update-summary.md
+          branch: dependency-updates/automated
+          delete-branch: true
+          labels: |
+            dependencies
+            automated
+          reviewers: |
+            harold-team/maintainers
+          draft: false
+
+  # Обновление GitHub Actions
+  update-actions:
+    name: Update GitHub Actions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update GitHub Actions versions
+        run: |
+          echo "Checking for GitHub Actions updates..."
+
+          # Список actions для обновления
+          declare -A actions_map=(
+            ["actions/checkout"]="v4"
+            ["actions/setup-node"]="v4"
+            ["actions/cache"]="v4"
+            ["github/codeql-action/init"]="v3"
+            ["github/codeql-action/analyze"]="v3"
+            ["actions/github-script"]="v7"
+            ["codecov/codecov-action"]="v3"
+          )
+
+          updated_actions=""
+
+          # Обновляем каждый action
+          for action in "${!actions_map[@]}"; do
+            latest_version="${actions_map[$action]}"
+
+            echo "Updating $action to $latest_version..."
+
+            # Находим и обновляем все использования этого action
+            find .github/workflows -name "*.yml" -o -name "*.yaml" | while read -r file; do
+              if grep -q "uses: $action@" "$file"; then
+                # Обновляем версию
+                sed -i "s|uses: $action@[^[:space:]]*|uses: $action@$latest_version|g" "$file"
+                echo "  Updated in $file"
+              fi
+            done
+
+            updated_actions="$updated_actions\n- $action@$latest_version"
+          done
+
+          # Сохраняем список обновленных actions
+          echo -e "$updated_actions" > updated-actions.txt
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+            echo "No GitHub Actions updates needed"
+          else
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+            echo "GitHub Actions updates available"
+            git diff --name-only
+          fi
+
+      - name: Create Pull Request for Actions
+        if: steps.changes.outputs.has-changes == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            chore: update GitHub Actions versions
+
+            Updated GitHub Actions to latest stable versions:
+            $(cat updated-actions.txt)
+          title: 'chore: update GitHub Actions versions'
+          body: |
+            ## GitHub Actions Updates
+
+            This PR updates GitHub Actions to their latest stable versions:
+
+            $(cat updated-actions.txt)
+
+            ## Changes
+
+            - Updated action versions in workflow files
+            - All workflows should continue to work as expected
+            - No breaking changes expected
+
+            ## Testing
+
+            Please verify that all workflows still function correctly after merging.
+          branch: dependency-updates/github-actions
+          delete-branch: true
+          labels: |
+            dependencies
+            github-actions
+            automated
+
+  # Сводка результатов
+  update-summary:
+    name: Update Summary
+    runs-on: ubuntu-latest
+    needs: [check-updates, update-dependencies, update-actions]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# Dependency Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Проверка обновлений
+          if [ "${{ needs.check-updates.result }}" = "success" ]; then
+            echo "✅ **Dependency Check:** Completed" >> $GITHUB_STEP_SUMMARY
+            echo "   - ${{ needs.check-updates.outputs.summary }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Dependency Check:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Обновление зависимостей
+          if [ "${{ needs.update-dependencies.result }}" = "success" ]; then
+            echo "✅ **NPM Dependencies:** Updated successfully" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.update-dependencies.result }}" = "skipped" ]; then
+            echo "⏭️ **NPM Dependencies:** Skipped (no updates needed)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **NPM Dependencies:** Update failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Обновление GitHub Actions
+          if [ "${{ needs.update-actions.result }}" = "success" ]; then
+            echo "✅ **GitHub Actions:** Checked and updated if needed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **GitHub Actions:** Update check failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Общий статус
+          if [ "${{ needs.check-updates.outputs.has-updates }}" = "true" ]; then
+            echo "## 📦 Next Steps" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Pull requests have been created for available updates." >> $GITHUB_STEP_SUMMARY
+            echo "Please review and merge them after testing." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ✅ All Up to Date" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "All dependencies are currently up to date." >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,0 +1,447 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Линтинг и проверка форматирования
+  lint:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'harold-action/tests/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd harold-action/tests
+          npm ci
+
+      - name: Run ESLint
+        run: |
+          cd harold-action/tests
+          npm run lint
+
+      - name: Check shell scripts with shellcheck
+        run: |
+          # Установка shellcheck
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+          # Проверка всех bash скриптов
+          find harold-action/scripts -name "*.sh" -type f -exec shellcheck {} \;
+
+      - name: Check YAML files
+        run: |
+          # Установка yamllint
+          pip install yamllint
+
+          # Проверка YAML файлов
+          yamllint harold-action/action.yml
+          yamllint harold-action/.github/workflows/
+          yamllint harold-action/.github/ISSUE_TEMPLATE/
+
+  # Unit тесты
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'harold-action/tests/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd harold-action/tests
+          npm ci
+
+      - name: Run unit tests
+        run: |
+          cd harold-action/tests
+          npm run test:unit
+
+      - name: Upload coverage to Codecov
+        if: matrix.node-version == 18
+        uses: codecov/codecov-action@v3
+        with:
+          file: harold-action/tests/coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+
+  # Integration тесты
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    strategy:
+      matrix:
+        node-version: [18, 20]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'harold-action/tests/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd harold-action/tests
+          npm ci
+
+      - name: Run integration tests
+        run: |
+          cd harold-action/tests
+          npm run test:integration
+
+  # Кроссплатформенное тестирование
+  cross-platform-tests:
+    name: Cross-Platform Tests
+    needs: [unit-tests, integration-tests]
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18, 20]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'harold-action/tests/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd harold-action/tests
+          npm ci
+
+      - name: Run cross-platform tests
+        run: |
+          cd harold-action/tests
+          npm run test:unit
+
+      - name: Test action scripts (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          # Проверяем, что скрипты исполняемые
+          find harold-action/scripts -name "*.sh" -type f -exec test -x {} \;
+
+          # Тестируем базовые функции скриптов
+          harold-action/scripts/cache-manager.sh help
+          harold-action/scripts/early-exit-check.sh || true
+
+      - name: Test action scripts (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # На Windows тестируем через bash
+          bash harold-action/scripts/cache-manager.sh help
+          bash harold-action/scripts/early-exit-check.sh || true
+
+  # Проверка безопасности
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'harold-action/tests/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd harold-action/tests
+          npm ci
+
+      - name: Run npm audit
+        run: |
+          cd harold-action/tests
+          npm audit --audit-level moderate
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+      - name: Check for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+
+  # Проверка документации
+  docs-check:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check README links
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          use-verbose-mode: 'yes'
+          config-file: '.github/mlc_config.json'
+
+      - name: Validate action.yml
+        run: |
+          # Проверяем синтаксис action.yml
+          python -c "
+          import yaml
+          import sys
+          try:
+              with open('harold-action/action.yml', 'r') as f:
+                  yaml.safe_load(f)
+              print('✅ action.yml is valid')
+          except yaml.YAMLError as e:
+              print(f'❌ action.yml is invalid: {e}')
+              sys.exit(1)
+          "
+
+      - name: Check documentation completeness
+        run: |
+          # Проверяем, что все входные параметры документированы
+          cd harold-action
+
+          # Извлекаем параметры из action.yml
+          grep -A 1 "description:" action.yml | grep -v "description:" | wc -l > /tmp/params_count
+
+          # Проверяем, что они упомянуты в README
+          params_in_readme=$(grep -c "inputs\." README.md || echo "0")
+
+          echo "Parameters in action.yml: $(cat /tmp/params_count)"
+          echo "Parameters documented in README: $params_in_readme"
+
+  # E2E тесты (запускаются только на main ветке)
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Test Harold Action (Basic)
+        uses: ./harold-action
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          build-command: 'echo "console.log(\"test\");" > test.js'
+          build-path: '.'
+        continue-on-error: true
+
+      - name: Verify E2E test results
+        run: |
+          echo "✅ E2E test completed"
+
+          # Проверяем, что файлы результата созданы
+          if [ -f "harold-output.txt" ]; then
+            echo "✅ Harold output file created"
+            cat harold-output.txt
+          fi
+
+          if [ -f "harold-exit-code.txt" ]; then
+            echo "✅ Harold exit code file created"
+            cat harold-exit-code.txt
+          fi
+
+  # Проверка производительности
+  performance-test:
+    name: Performance Test
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Create large test project
+        run: |
+          mkdir -p large-test-project/dist
+
+          # Создаем много файлов для тестирования производительности
+          for i in {1..100}; do
+            echo "console.log('Component $i');" > large-test-project/dist/component-$i.js
+          done
+
+          # Создаем конфигурацию Harold
+          cat > large-test-project/.haroldrc.js << 'EOF'
+          export default {
+            build: { command: 'echo "Build completed"', path: 'dist' },
+            categories: { js: '**/*.js' }
+          };
+          EOF
+
+      - name: Benchmark Harold Action
+        run: |
+          start_time=$(date +%s)
+
+          # Запускаем Harold Action
+          timeout 300 harold-action/scripts/build-and-snapshot-cached.sh base || true
+
+          end_time=$(date +%s)
+          duration=$((end_time - start_time))
+
+          echo "Performance test completed in ${duration}s"
+
+          # Проверяем, что время выполнения разумное (< 60s для 100 файлов)
+          if [ $duration -gt 60 ]; then
+            echo "⚠️ Performance test took longer than expected: ${duration}s"
+          else
+            echo "✅ Performance test completed within acceptable time: ${duration}s"
+          fi
+
+  # Сводка результатов
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [lint, unit-tests, integration-tests, cross-platform-tests, security-scan, docs-check]
+    if: always()
+
+    steps:
+      - name: Generate test summary
+        run: |
+          echo "# CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Проверяем результаты каждого job'а
+          if [ "${{ needs.lint.result }}" = "success" ]; then
+            echo "✅ **Lint:** PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Lint:** FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.unit-tests.result }}" = "success" ]; then
+            echo "✅ **Unit Tests:** PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Unit Tests:** FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.integration-tests.result }}" = "success" ]; then
+            echo "✅ **Integration Tests:** PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Integration Tests:** FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.cross-platform-tests.result }}" = "success" ]; then
+            echo "✅ **Cross-Platform Tests:** PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Cross-Platform Tests:** FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.security-scan.result }}" = "success" ]; then
+            echo "✅ **Security Scan:** PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Security Scan:** FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.docs-check.result }}" = "success" ]; then
+            echo "✅ **Documentation:** PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Documentation:** FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Определяем общий статус
+          failed_count=0
+          [ "${{ needs.lint.result }}" != "success" ] && ((failed_count++))
+          [ "${{ needs.unit-tests.result }}" != "success" ] && ((failed_count++))
+          [ "${{ needs.integration-tests.result }}" != "success" ] && ((failed_count++))
+          [ "${{ needs.cross-platform-tests.result }}" != "success" ] && ((failed_count++))
+          [ "${{ needs.security-scan.result }}" != "success" ] && ((failed_count++))
+          [ "${{ needs.docs-check.result }}" != "success" ] && ((failed_count++))
+
+          if [ $failed_count -eq 0 ]; then
+            echo "## 🎉 Overall Status: ALL TESTS PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ❌ Overall Status: $failed_count TEST(S) FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Set final status
+        run: |
+          failed_count=0
+          [ "${{ needs.lint.result }}" != "success" ] && ((failed_count++))
+          [ "${{ needs.unit-tests.result }}" != "success" ] && ((failed_count++))
+          [ "${{ needs.integration-tests.result }}" != "success" ] && ((failed_count++))
+          [ "${{ needs.cross-platform-tests.result }}" != "success" ] && ((failed_count++))
+          [ "${{ needs.security-scan.result }}" != "success" ] && ((failed_count++))
+          [ "${{ needs.docs-check.result }}" != "success" ] && ((failed_count++))
+
+          if [ $failed_count -gt 0 ]; then
+            echo "❌ CI/CD pipeline failed: $failed_count test(s)"
+            exit 1
+          else
+            echo "✅ All CI/CD tests passed"
+          fi
