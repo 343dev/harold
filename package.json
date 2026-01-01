@@ -32,7 +32,7 @@
     "update-git-hooks": "npx simple-git-hooks"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.18"
   },
   "dependencies": {
     "cli-table3": "^0.6.5",
@@ -46,7 +46,7 @@
   "devDependencies": {
     "@343dev/eslint-config": "^1.0.0",
     "eslint": "^8.57.0",
-    "lint-staged": "^15.2.8",
+    "lint-staged": "16.2.7",
     "simple-git-hooks": "^2.11.1"
   },
   "lint-staged": {
