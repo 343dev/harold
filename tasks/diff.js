@@ -16,7 +16,7 @@ export default function diff(left, right) {
 
 	if (leftBuffer.equals(rightBuffer)) {
 		console.log('Snapshots are equal');
-		process.exit(0); // eslint-disable-line unicorn/no-process-exit
+		return;
 	}
 
 	const leftSnapshot = JSON.parse(leftBuffer.toString());

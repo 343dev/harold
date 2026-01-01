@@ -1,0 +1,31 @@
+name: Node.js CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        node-version: [20.18.0, latest]
+        os: [
+            ubuntu-latest, # x64
+            ubuntu-24.04-arm, # arm64
+            macos-15-intel, # x64
+            macos-15, # arm64
+          ]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }} on ${{ matrix.os }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Run linters
+        run: npm run lint

@@ -32,30 +32,27 @@
     "update-git-hooks": "npx simple-git-hooks"
   },
   "engines": {
-    "node": ">=18.12"
+    "node": ">=20.18"
   },
   "dependencies": {
-    "cli-table3": "^0.6.5",
-    "commander": "^12.0.0",
-    "fast-glob": "^3.3.2",
-    "gzip-size": "^7.0.0",
-    "nanospinner": "^1.1.0",
-    "pretty-bytes": "^6.1.1",
-    "signal-exit": "^4.1.0"
+    "cli-table3": "0.6.5",
+    "commander": "14.0.2",
+    "fast-glob": "3.3.3",
+    "gzip-size": "7.0.0",
+    "nanospinner": "1.2.2",
+    "pretty-bytes": "7.1.0",
+    "signal-exit": "4.1.0"
   },
   "devDependencies": {
-    "@343dev/eslint-config": "^1.0.0",
-    "eslint": "^8.57.0",
-    "lint-staged": "^15.2.8",
-    "simple-git-hooks": "^2.11.1"
+    "@343dev/eslint-config": "4.0.0",
+    "eslint": "9.39.2",
+    "lint-staged": "16.2.7",
+    "simple-git-hooks": "2.13.1"
   },
   "lint-staged": {
     "*.js": "eslint --fix"
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged"
-  },
-  "eslintConfig": {
-    "extends": "@343dev"
   }
 }
