@@ -44,8 +44,8 @@
     "signal-exit": "^4.1.0"
   },
   "devDependencies": {
-    "@343dev/eslint-config": "^1.0.0",
-    "eslint": "^8.57.0",
+    "@343dev/eslint-config": "4.0.0",
+    "eslint": "9.39.2",
     "lint-staged": "16.2.7",
     "simple-git-hooks": "2.13.1"
   },
@@ -54,8 +54,5 @@
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged"
-  },
-  "eslintConfig": {
-    "extends": "@343dev"
   }
 }
