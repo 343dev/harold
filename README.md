@@ -1,6 +1,6 @@
 # @343dev/harold
 
-<img align="right" width="192" height="192"
+<img align="right" width="124" height="124"
      alt="Harold avatar: Sad emoji with a smile mask on a face"
      src="./logo.png">
 
