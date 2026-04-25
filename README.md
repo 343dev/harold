@@ -9,8 +9,6 @@
 
 **Harold** is a CLI tool that compares frontend project bundles in size.
 
-[По-русски](./README.ru.md)
-
 ## Rationale
 
 The bundle size of an average frontend project grows on every change.
