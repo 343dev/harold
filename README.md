@@ -4,6 +4,7 @@
      alt="Harold avatar: Sad emoji with a smile mask on a face"
      src="./logo.png">
 
+[![NPM Downloads](https://img.shields.io/npm/dw/%40343dev%2Fharold)](https://www.npmjs.com/package/@343dev/harold)
 [![npm](https://img.shields.io/npm/v/@343dev/harold.svg)](https://www.npmjs.com/package/@343dev/harold)
 
 **Harold** is a CLI tool that compares frontend project bundles in size.
